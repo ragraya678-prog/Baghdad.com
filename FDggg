@@ -1,0 +1,14 @@
+total_profit = 0
+while True:
+    buy_profit = float(input("Enter whilesale price: "))
+    sell_price = float(input("Enter selling price: "))
+    quantity = int(input("Enter quantity"))
+    total_cost = buy_profit * quantity
+    total_sales = sell_price * quantity 
+    profit = total_sales - total_cost
+    total_profit = total_profit + profit
+    print("profit this sale:", profit)
+    print("Total profit today:", total_profit)
+    stop = input("Do you want to stop? yes / no: ")
+    if stop == "yes":
+          break
