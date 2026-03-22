@@ -1,0 +1,516 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, scrolledtext, font
+from tkinter import PhotoImage
+import cv2
+from pyzbar.pyzbar import decode
+import sqlite3
+import datetime
+import threading
+import os
+from PIL import Image, ImageTk
+import json
+
+class InventorySystem:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("نظام تدقيق القوائم المتكامل - V2.0")
+        self.root.geometry("1200x700")
+        self.root.configure(bg='#2c3e50')
+        
+        # متغيرات التحكم
+        self.camera_running = False
+        self.cap = None
+        self.current_barcode = ""
+        self.current_product = None
+        
+        # تهيئة قاعدة البيانات
+        self.init_database()
+        
+        # بناء الواجهة
+        self.setup_ui()
+        
+        # بدء الكاميرا
+        self.start_camera()
+        
+        # تحديث الإحصائيات
+        self.update_stats()
+    
+    def init_database(self):
+        """إنشاء قاعدة البيانات وجداولها"""
+        self.conn = sqlite3.connect('inventory.db')
+        self.cursor = self.conn.cursor()
+        
+        # جدول الأصناف
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                barcode TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                category TEXT,
+                price REAL,
+                quantity INTEGER DEFAULT 0,
+                created_date TEXT,
+                last_updated TEXT
+            )
+        ''')
+        
+        # جدول سجل الجرد
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                barcode TEXT NOT NULL,
+                product_name TEXT,
+                audit_date TEXT,
+                auditor_name TEXT,
+                status TEXT
+            )
+        ''')
+        
+        # جدول الإعدادات
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        ''')
+        
+        # إضافة بعض البيانات التجريبية إذا كانت قاعدة البيانات فارغة
+        self.cursor.execute("SELECT COUNT(*) FROM products")
+        if self.cursor.fetchone()[0] == 0:
+            self.add_sample_data()
+        
+        self.conn.commit()
+    
+    def add_sample_data(self):
+        """إضافة بيانات تجريبية للاختبار"""
+        sample_products = [
+            ("123456789012", "شاشة 24 بوصة LED", "إلكترونيات", 450.00, 10),
+            ("987654321098", "ماوس لاسلكي", "إلكترونيات", 25.00, 50),
+            ("555555555555", "لوحة مفاتيح", "إلكترونيات", 35.00, 30),
+            ("111111111111", "طابعة ليزر", "مكتبية", 250.00, 5),
+            ("222222222222", "ورق A4", "مكتبية", 12.50, 100),
+        ]
+        
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for barcode, name, category, price, qty in sample_products:
+            self.cursor.execute('''
+                INSERT INTO products (barcode, name, category, price, quantity, created_date, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (barcode, name, category, price, qty, now, now))
+        
+        self.conn.commit()
+    
+    def setup_ui(self):
+        """بناء واجهة المستخدم"""
+        # إطار رئيسي
+        main_frame = tk.Frame(self.root, bg='#2c3e50')
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # الجزء العلوي - العنوان
+        title_font = font.Font(size=20, weight="bold")
+        title_label = tk.Label(main_frame, text="📊 نظام تدقيق القوائم الذكي", 
+                               font=title_font, bg='#2c3e50', fg='white')
+        title_label.pack(pady=10)
+        
+        # إطار المحتوى الرئيسي (3 أعمدة)
+        content_frame = tk.Frame(main_frame, bg='#2c3e50')
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # العمود الأيمن - الكاميرا
+        camera_frame = tk.Frame(content_frame, bg='black', width=400, height=300)
+        camera_frame.pack(side=tk.RIGHT, padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        self.camera_label = tk.Label(camera_frame, bg='black', width=400, height=300)
+        self.camera_label.pack(expand=True)
+        
+        # العمود الأيسر - المعلومات والإدارة
+        left_frame = tk.Frame(content_frame, bg='#34495e', width=350)
+        left_frame.pack(side=tk.LEFT, padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        # معلومات آخر كود مقروء
+        info_frame = tk.LabelFrame(left_frame, text="📌 آخر كود تم قراءته", 
+                                   bg='#34495e', fg='white', font=('Arial', 12, 'bold'))
+        info_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        tk.Label(info_frame, text="الباركود:", bg='#34495e', fg='white').grid(row=0, column=0, sticky='w', padx=5, pady=5)
+        self.barcode_var = tk.StringVar(value="---")
+        tk.Entry(info_frame, textvariable=self.barcode_var, state='readonly', width=25).grid(row=0, column=1, padx=5, pady=5)
+        
+        tk.Label(info_frame, text="المنتج:", bg='#34495e', fg='white').grid(row=1, column=0, sticky='w', padx=5, pady=5)
+        self.product_var = tk.StringVar(value="---")
+        tk.Entry(info_frame, textvariable=self.product_var, state='readonly', width=25).grid(row=1, column=1, padx=5, pady=5)
+        
+        tk.Label(info_frame, text="الفئة:", bg='#34495e', fg='white').grid(row=2, column=0, sticky='w', padx=5, pady=5)
+        self.category_var = tk.StringVar(value="---")
+        tk.Entry(info_frame, textvariable=self.category_var, state='readonly', width=25).grid(row=2, column=1, padx=5, pady=5)
+        
+        tk.Label(info_frame, text="السعر:", bg='#34495e', fg='white').grid(row=3, column=0, sticky='w', padx=5, pady=5)
+        self.price_var = tk.StringVar(value="---")
+        tk.Entry(info_frame, textvariable=self.price_var, state='readonly', width=25).grid(row=3, column=1, padx=5, pady=5)
+        
+        # أزرار التحكم
+        btn_frame = tk.Frame(left_frame, bg='#34495e')
+        btn_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        self.save_btn = tk.Button(btn_frame, text="✅ تسجيل الجرد", command=self.save_audit,
+                                 bg='#27ae60', fg='white', font=('Arial', 11), state=tk.DISABLED)
+        self.save_btn.pack(fill=tk.X, pady=5)
+        
+        tk.Button(btn_frame, text="🔍 بحث يدوي", command=self.search_manual,
+                 bg='#3498db', fg='white', font=('Arial', 11)).pack(fill=tk.X, pady=5)
+        
+        tk.Button(btn_frame, text="➕ إضافة منتج جديد", command=self.add_product,
+                 bg='#f39c12', fg='white', font=('Arial', 11)).pack(fill=tk.X, pady=5)
+        
+        tk.Button(btn_frame, text="📊 تقرير الجرد", command=self.show_report,
+                 bg='#9b59b6', fg='white', font=('Arial', 11)).pack(fill=tk.X, pady=5)
+        
+        tk.Button(btn_frame, text="🔄 تحديث الإحصائيات", command=self.update_stats,
+                 bg='#1abc9c', fg='white', font=('Arial', 11)).pack(fill=tk.X, pady=5)
+        
+        tk.Button(btn_frame, text="⏹️ إيقاف الكاميرا", command=self.toggle_camera,
+                 bg='#e74c3c', fg='white', font=('Arial', 11)).pack(fill=tk.X, pady=5)
+        
+        # إطار الإحصائيات
+        stats_frame = tk.LabelFrame(left_frame, text="📈 إحصائيات سريعة", 
+                                    bg='#34495e', fg='white', font=('Arial', 12, 'bold'))
+        stats_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        self.stats_text = tk.Text(stats_frame, height=8, bg='#2c3e50', fg='white', 
+                                  font=('Arial', 10), wrap=tk.WORD)
+        self.stats_text.pack(fill=tk.BOTH, padx=5, pady=5, expand=True)
+        
+        # سجل العمليات
+        log_frame = tk.LabelFrame(left_frame, text="📝 سجل العمليات", 
+                                  bg='#34495e', fg='white', font=('Arial', 12, 'bold'))
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, bg='#2c3e50', 
+                                                  fg='#ecf0f1', font=('Arial', 9))
+        self.log_text.pack(fill=tk.BOTH, padx=5, pady=5, expand=True)
+        
+        self.log("✅ النظام جاهز للعمل")
+        self.log("📷 قم بتقريب أي باركود أمام الكاميرا")
+    
+    def log(self, message):
+        """إضافة رسالة للسجل"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+        self.log_text.see(tk.END)
+        self.root.update()
+    
+    def start_camera(self):
+        """تشغيل الكاميرا"""
+        if not self.camera_running:
+            self.camera_running = True
+            self.cap = cv2.VideoCapture(0)
+            threading.Thread(target=self.read_barcodes, daemon=True).start()
+            self.log("📷 تم تشغيل الكاميرا")
+    
+    def read_barcodes(self):
+        """قراءة الباركود من الكاميرا"""
+        last_barcode = ""
+        
+        while self.camera_running:
+            ret, frame = self.cap.read()
+            if not ret:
+                continue
+            
+            # قراءة الباركود
+            barcodes = decode(frame)
+            
+            # عرض الصورة
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(frame_rgb)
+            img = img.resize((400, 300), Image.Resampling.LANCZOS)
+            imgtk = ImageTk.PhotoImage(image=img)
+            self.camera_label.imgtk = imgtk
+            self.camera_label.configure(image=imgtk)
+            
+            # معالجة الباركود
+            for barcode in barcodes:
+                barcode_data = barcode.data.decode('utf-8')
+                if barcode_data != last_barcode:
+                    last_barcode = barcode_data
+                    self.process_barcode(barcode_data)
+            
+            cv2.waitKey(1)
+        
+        if self.cap:
+            self.cap.release()
+    
+    def process_barcode(self, barcode):
+        """معالجة الباركود المقروء"""
+        self.current_barcode = barcode
+        self.barcode_var.set(barcode)
+        
+        # البحث في قاعدة البيانات
+        self.cursor.execute("SELECT * FROM products WHERE barcode = ?", (barcode,))
+        product = self.cursor.fetchone()
+        
+        if product:
+            self.current_product = product
+            self.product_var.set(product[2])
+            self.category_var.set(product[3] if product[3] else "غير محدد")
+            self.price_var.set(f"{product[4]:.2f} ريال" if product[4] else "---")
+            self.log(f"✅ تم قراءة الكود: {barcode} - المنتج: {product[2]}")
+            self.save_btn.config(state=tk.NORMAL)
+            
+            # تشغيل صوت تنبيه (اختياري - يشتغل على ويندوز)
+            try:
+                import winsound
+                winsound.Beep(1000, 200)
+            except:
+                pass
+        else:
+            self.current_product = None
+            self.product_var.set("❌ غير موجود في النظام")
+            self.category_var.set("---")
+            self.price_var.set("---")
+            self.log(f"⚠️ تحذير: الكود {barcode} غير مسجل في النظام!")
+            self.save_btn.config(state=tk.DISABLED)
+            
+            # عرض خيار إضافة المنتج
+            if messagebox.askyesno("منتج غير موجود", f"الباركود {barcode}\nغير موجود في النظام.\nهل تريد إضافته الآن؟"):
+                self.add_product(barcode)
+    
+    def save_audit(self):
+        """تسجيل عملية الجرد"""
+        if not self.current_barcode or not self.current_product:
+            return
+        
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # تسجيل في جدول الجرد
+        self.cursor.execute('''
+            INSERT INTO audit_log (barcode, product_name, audit_date, auditor_name, status)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (self.current_barcode, self.current_product[2], now, "المدقق الرئيسي", "تم الجرد"))
+        
+        # تحديث الكمية في المخزون (اختياري)
+        new_quantity = self.current_product[5] + 1
+        self.cursor.execute('''
+            UPDATE products SET quantity = ?, last_updated = ? WHERE barcode = ?
+        ''', (new_quantity, now, self.current_barcode))
+        
+        self.conn.commit()
+        
+        self.log(f"📝 تم تسجيل جرد المنتج: {self.current_product[2]} (الكمية الجديدة: {new_quantity})")
+        messagebox.showinfo("تم الحفظ", f"تم تسجيل جرد المنتج:\n{self.current_product[2]}\nالباركود: {self.current_barcode}")
+        
+        # تحديث الإحصائيات
+        self.update_stats()
+        
+        # تعطيل الزر مؤقتاً
+        self.save_btn.config(state=tk.DISABLED)
+        
+        # تحديث معلومات المنتج الحالي بالكمية الجديدة
+        self.cursor.execute("SELECT * FROM products WHERE barcode = ?", (self.current_barcode,))
+        self.current_product = self.cursor.fetchone()
+    
+    def search_manual(self):
+        """البحث اليدوي عن منتج"""
+        search_window = tk.Toplevel(self.root)
+        search_window.title("بحث عن منتج")
+        search_window.geometry("500x400")
+        search_window.configure(bg='#34495e')
+        
+        tk.Label(search_window, text="أدخل الباركود أو اسم المنتج:", 
+                bg='#34495e', fg='white').pack(pady=10)
+        
+        search_entry = tk.Entry(search_window, width=40, font=('Arial', 11))
+        search_entry.pack(pady=5)
+        
+        result_text = scrolledtext.ScrolledText(search_window, height=15, width=60)
+        result_text.pack(pady=10)
+        
+        def do_search():
+            search_term = search_entry.get()
+            if not search_term:
+                return
+            
+            result_text.delete(1.0, tk.END)
+            
+            # البحث بالباركود أو الاسم
+            self.cursor.execute('''
+                SELECT * FROM products 
+                WHERE barcode LIKE ? OR name LIKE ?
+                ORDER BY name
+            ''', (f'%{search_term}%', f'%{search_term}%'))
+            
+            products = self.cursor.fetchall()
+            
+            if products:
+                for p in products:
+                    result_text.insert(tk.END, f"📦 {p[2]}\n")
+                    result_text.insert(tk.END, f"   الباركود: {p[1]}\n")
+                    result_text.insert(tk.END, f"   الفئة: {p[3] if p[3] else 'غير محدد'}\n")
+                    result_text.insert(tk.END, f"   السعر: {p[4]:.2f} ريال\n")
+                    result_text.insert(tk.END, f"   الكمية: {p[5]}\n")
+                    result_text.insert(tk.END, "-" * 40 + "\n")
+            else:
+                result_text.insert(tk.END, "❌ لا توجد نتائج")
+        
+        tk.Button(search_window, text="بحث", command=do_search,
+                 bg='#3498db', fg='white').pack(pady=5)
+    
+    def add_product(self, barcode=None):
+        """إضافة منتج جديد"""
+        add_window = tk.Toplevel(self.root)
+        add_window.title("إضافة منتج جديد")
+        add_window.geometry("400x450")
+        add_window.configure(bg='#34495e')
+        
+        fields = {}
+        labels = ["الباركود:", "اسم المنتج:", "الفئة:", "السعر:", "الكمية الابتدائية:"]
+        
+        for i, label in enumerate(labels):
+            tk.Label(add_window, text=label, bg='#34495e', fg='white').pack(pady=5)
+            entry = tk.Entry(add_window, width=30, font=('Arial', 11))
+            entry.pack(pady=2)
+            fields[label] = entry
+        
+        # إذا تم تمرير باركود، نعبئه تلقائياً
+        if barcode:
+            fields["الباركود:"].insert(0, barcode)
+            fields["الباركود:"].config(state='readonly')
+        
+        def save_new_product():
+            try:
+                barcode_val = fields["الباركود:"].get()
+                name_val = fields["اسم المنتج:"].get()
+                category_val = fields["الفئة:"].get()
+                price_val = float(fields["السعر:"].get()) if fields["السعر:"].get() else 0
+                quantity_val = int(fields["الكمية الابتدائية:"].get()) if fields["الكمية الابتدائية:"].get() else 0
+                
+                if not barcode_val or not name_val:
+                    messagebox.showerror("خطأ", "الباركود واسم المنتج مطلوبان")
+                    return
+                
+                now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                self.cursor.execute('''
+                    INSERT INTO products (barcode, name, category, price, quantity, created_date, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (barcode_val, name_val, category_val, price_val, quantity_val, now, now))
+                
+                self.conn.commit()
+                self.log(f"➕ تم إضافة منتج جديد: {name_val} (الباركود: {barcode_val})")
+                messagebox.showinfo("تم الحفظ", f"تم إضافة المنتج:\n{name_val}")
+                add_window.destroy()
+                self.update_stats()
+                
+            except Exception as e:
+                messagebox.showerror("خطأ", f"حدث خطأ: {str(e)}")
+        
+        tk.Button(add_window, text="حفظ المنتج", command=save_new_product,
+                 bg='#27ae60', fg='white', font=('Arial', 11)).pack(pady=10)
+    
+    def show_report(self):
+        """عرض تقرير الجرد"""
+        report_window = tk.Toplevel(self.root)
+        report_window.title("تقرير الجرد")
+        report_window.geometry("700x500")
+        report_window.configure(bg='#34495e')
+        
+        # جلب بيانات الجرد
+        self.cursor.execute('''
+            SELECT audit_date, barcode, product_name, auditor_name 
+            FROM audit_log 
+            ORDER BY audit_date DESC 
+            LIMIT 100
+        ''')
+        
+        audits = self.cursor.fetchall()
+        
+        report_text = scrolledtext.ScrolledText(report_window, height=25, width=80, font=('Arial', 10))
+        report_text.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        report_text.insert(tk.END, "=" * 70 + "\n")
+        report_text.insert(tk.END, f"{'تقرير جرد المخزون':^70}\n")
+        report_text.insert(tk.END, f"{'تاريخ التقرير: ' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'):^70}\n")
+        report_text.insert(tk.END, "=" * 70 + "\n\n")
+        
+        if audits:
+            for audit in audits:
+                report_text.insert(tk.END, f"📅 التاريخ: {audit[0]}\n")
+                report_text.insert(tk.END, f"📦 الباركود: {audit[1]}\n")
+                report_text.insert(tk.END, f"🏷️ المنتج: {audit[2]}\n")
+                report_text.insert(tk.END, f"👤 المدقق: {audit[3]}\n")
+                report_text.insert(tk.END, "-" * 50 + "\n\n")
+            
+            report_text.insert(tk.END, f"\n📊 إجمالي العمليات: {len(audits)} عملية جرد\n")
+        else:
+            report_text.insert(tk.END, "❌ لا توجد عمليات جرد مسجلة حتى الآن\n")
+        
+        # زر تصدير التقرير
+        def export_report():
+            filename = f"audit_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(report_text.get(1.0, tk.END))
+            messagebox.showinfo("تم التصدير", f"تم حفظ التقرير في:\n{filename}")
+            self.log(f"📄 تم تصدير تقرير الجرد: {filename}")
+        
+        tk.Button(report_window, text="تصدير التقرير", command=export_report,
+                 bg='#9b59b6', fg='white').pack(pady=5)
+    
+    def update_stats(self):
+        """تحديث الإحصائيات"""
+        # عدد الأصناف الكلي
+        self.cursor.execute("SELECT COUNT(*) FROM products")
+        total_products = self.cursor.fetchone()[0]
+        
+        # عدد عمليات الجرد اليوم
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        self.cursor.execute("SELECT COUNT(*) FROM audit_log WHERE audit_date LIKE ?", (f'{today}%',))
+        today_audits = self.cursor.fetchone()[0]
+        
+        # إجمالي عمليات الجرد
+        self.cursor.execute("SELECT COUNT(*) FROM audit_log")
+        total_audits = self.cursor.fetchone()[0]
+        
+        # آخر 5 عمليات جرد
+        self.cursor.execute('''
+            SELECT product_name, audit_date FROM audit_log 
+            ORDER BY audit_date DESC LIMIT 5
+        ''')
+        last_audits = self.cursor.fetchall()
+        
+        # تنظيف وعرض الإحصائيات
+        self.stats_text.delete(1.0, tk.END)
+        self.stats_text.insert(tk.END, f"📦 إجمالي الأصناف: {total_products}\n")
+        self.stats_text.insert(tk.END, f"✅ جرد اليوم: {today_audits}\n")
+        self.stats_text.insert(tk.END, f"📊 إجمالي الجرد: {total_audits}\n")
+        self.stats_text.insert(tk.END, f"\n🔄 آخر العمليات:\n")
+        
+        if last_audits:
+            for product, date in last_audits:
+                date_short = date.split()[1] if ' ' in date else date
+                self.stats_text.insert(tk.END, f"  • {product} ({date_short})\n")
+        else:
+            self.stats_text.insert(tk.END, "  لا توجد عمليات بعد\n")
+    
+    def toggle_camera(self):
+        """تشغيل/إيقاف الكاميرا"""
+        if self.camera_running:
+            self.camera_running = False
+            self.log("⏹️ تم إيقاف الكاميرا")
+        else:
+            self.start_camera()
+            self.log("▶️ تم تشغيل الكاميرا")
+
+# تشغيل البرنامج
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = InventorySystem(root)
+    
+    # التعامل مع إغلاق النافذة
+    def on_closing():
+        app.camera_running = False
+        if app.cap:
+            app.cap.release()
+        app.conn.close()
+        root.destroy()
+    
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+    root.mainloop()
