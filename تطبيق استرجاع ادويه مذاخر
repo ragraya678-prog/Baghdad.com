@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#060D08">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PharmReturn IQ</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+:root {
+  --bg:#060D08; --s1:#0C180F; --s2:#111E14; --s3:#172619;
+  --b:#1E3322; --b2:#273D2B; --b3:#304838;
+  --g1:#22C55E; --g2:#16A34A; --g3:#4ADE80; --g4:#86EFAC;
+  --glow:#22C55E18; --glow2:#22C55E32; --glow3:#22C55E55;
+  --w:#F59E0B; --w2:#FCD34D; --d:#EF4444; --d2:#DC2626; --d3:#FCA5A5;
+  --bl:#3B82F6; --cy:#06B6D4; --cy2:#67E8F9; --pu:#8B5CF6; --pu2:#C4B5FD;
+  --tx:#F0FDF4; --mu:#5B9168; --mu2:#3D6B4A; --mu3:#1E3A24;
+  --gold:#FBBF24;
+  --r:18px; --r2:14px; --r3:10px; --r4:8px; --r5:6px;
+  --tr:.22s cubic-bezier(.4,0,.2,1);
+  --sh:0 4px 24px rgba(0,0,0,.5);
+  --shg:0 4px 28px var(--glow2);
+  --shg2:0 8px 40px var(--glow3);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html { height:100%; overscroll-behavior:none; }
+body { font-family:'Cairo',sans-serif; background:var(--bg); color:var(--tx); min-height:100dvh; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
+::-webkit-scrollbar { width:2px; }
+::-webkit-scrollbar-thumb { background:var(--b2); border-radius:99px; }
+::selection { background:var(--glow2); color:var(--g3); }
+
+/* SCREENS */
+.scr { display:none; min-height:100dvh; flex-direction:column; }
+.scr.on { display:flex; animation:fadeIn .28s cubic-bezier(.4,0,.2,1); }
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+/* TOPBAR */
+.tb { background:rgba(6,13,8,.9); border-bottom:1px solid var(--b); padding:13px 16px;
+  display:flex; align-items:center; justify-content:space-between;
+  position:sticky; top:0; z-index:100;
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
+.tb::after { content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--g2),var(--g3),var(--g2),transparent); opacity:.5; }
+.tb-t { font-size:15px; font-weight:800; color:var(--g3); }
+.tb-btn { background:rgba(255,255,255,.05); border:1px solid var(--b2); color:var(--tx);
+  padding:7px 13px; border-radius:var(--r4); font-family:'Cairo',sans-serif; font-size:12px;
+
+<!-- SCREENS HTML -->
+<!-- WELCOME -->
+<div id="sw" class="scr on">
+  <div class="wc">
+    <div class="logo">
+      <div class="logo-box">💊</div>
+      <div>
+        <div class="logo-nm">PharmReturn</div>
+        <div class="logo-sub">🇮🇶 نظام استرجاع الأدوية — العراق v5</div>
+      </div>
+    </div>
+    <div class="term" id="term"><div class="term-hdr"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span style="font-size:11px;color:var(--mu);margin-right:8px">pharm-return v5 | IQ</span></div><div id="tl"></div></div>
+    <div class="wa">
+      <button class="btn btn-p" onclick="G('sl')">🚀 تسجيل الدخول</button>
+      <button class="btn btn-s" onclick="showAdminPW()">👑 دخول المسؤول</button>
+      <div class="wa-hint">💡 يعمل بدون إنترنت بعد أول تحميل</div>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="sl" class="scr">
+  <div class="tb"><button class="tb-btn btn" onclick="G('sw')">← رجوع</button><div class="tb-t">تسجيل الدخول</div><div></div></div>
+  <div class="lc">
+    <div class="sec-t">الدور الوظيفي</div>
+    <div class="rg">
+      <div class="rc" id="r-rep" onclick="selRole('rep')"><div class="rc-ic">🧑‍💼</div><div class="rc-nm">مندوب</div><div class="rc-d">ميداني</div></div>
+      <div class="rc" id="r-driver" onclick="selRole('driver')"><div class="rc-ic">🚚</div><div class="rc-nm">سائق</div><div class="rc-d">توصيل</div></div>
+      <div class="rc" id="r-admin" onclick="selRole('admin')"><div class="rc-ic">👑</div><div class="rc-nm">مسؤول</div><div class="rc-d">إدارة</div></div>
+    </div>
+    <div class="l-err" id="l-err">⚠️ يرجى ملء جميع الحقول</div>
+    <div class="ig"><label class="il">الاسم الكامل *</label><input class="if" id="l-nm" type="text" placeholder="أدخل اسمك الكامل"></div>
+    <div class="ig" id="l-drv-w" style="display:none"><label class="il">اسم السائق</label><input class="if" id="l-drv" type="text" placeholder="اسم السائق المرافق"></div>
+    <div class="ig"><label class="il">المحافظة *</label>
+      <select class="if" id="l-reg">
+        <option value="">— اختر المحافظة —</option>
+        <option>بغداد - الكرخ</option><option>بغداد - الرصافة</option><option>البصرة</option>
+        <option>الموصل - نينوى</option><option>أربيل</option><option>النجف</option>
+        <option>كربلاء</option><option>السليمانية</option><option>كركوك</option>
+        <option>الأنبار</option><option>ديالى</option><option>بابل</option>
+        <option>واسط</option><option>ذي قار</option><option>ميسان</option>
+        <option>المثنى</option><option>القادسية</option><option>صلاح الدين</option>
+        <option>دهوك</option><option>حلبجة</option>
+      </select>
+    </div>
+    <button class="btn btn-p" onclick="doLogin()" style="margin-top:6px">دخول ✓</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="sd" class="scr">
+  <div class="tb"><div style="width:70px"></div><div class="tb-t">💊 PharmReturn</div><button class="tb-btn btn" onclick="doLogout()">خروج ↩</button></div>
+  <div class="dc">
+    <div class="ub">
+      <div class="ua" id="d-av">👤</div>
+      <div style="flex:1"><div class="u-nm" id="d-nm">—</div><div class="u-rl" id="d-rl">—</div><div class="u-tm" id="d-tm">—</div></div>
+      <div class="u-cnt" id="d-cnt" style="display:none"><div class="u-cnt-n" id="d-cnt-n">0</div><div class="u-cnt-l">هذا الشهر</div></div>
+    </div>
+    <div class="sg">
+      <div class="sc sc-g"><div class="sl">عمليات الشهر</div><div class="sv cg" id="s-m">0</div><div class="sc-sub">استرجاع</div></div>
+      <div class="sc sc-b"><div class="sl">إجمالي الأصناف</div><div class="sv cb" id="s-i">0</div><div class="sc-sub">صنف</div></div>
+    </div>
+    <div class="qb">
+      <div class="ql"><span class="ql-l">📊 الحد الأدنى الشهري</span><span class="ql-p" id="q-p">0%</span></div>
+      <div class="qbar"><div class="qf" id="q-f" style="width:0%"></div></div>
+      <div class="qi"><span id="q-i">—</span><span id="q-s"></span></div>
+    </div>
+    <div class="mt">العمليات الرئيسية</div>
+    <div class="mg">
+      <div class="mi" onclick="G('sn')"><div class="mi-ic ic-g">➕</div><div class="mi-t"><div class="mi-nm">استرجاع جديد</div><div class="mi-sb">تسجيل استرجاع من صيدلية مع باركود</div></div><div class="mi-ar">‹</div></div>
+      <div class="mi" onclick="G('sh')"><div class="mi-ic ic-b">📋</div><div class="mi-t"><div class="mi-nm">سجل الاسترجاعات</div><div class="mi-sb">بحث · فلترة · عرض التفاصيل</div></div><div class="mi-ar">‹</div></div>
+      <div class="mi" id="adm-mi" onclick="G('sa')" style="display:none"><div class="mi-ic ic-p">👑</div><div class="mi-t"><div class="mi-nm">لوحة المسؤول</div><div class="mi-sb">إحصاء · موظفون · أدوية · إعدادات</div></div><div class="mi-ar">‹</div></div>
+    </div>
+    <div class="mt">آخر العمليات</div>
+    <div id="d-rec"></div>
+  </div>
+  <div class="bnav">
+    <button class="ni on" id="nv-d" onclick="G('sd')"><div class="nic">🏠</div><div class="nlb">الرئيسية</div></button>
+    <button class="ni" id="nv-n" onclick="G('sn')"><div class="nic">➕</div><div class="nlb">استرجاع</div></button>
+    <button class="ni" id="nv-h" onclick="G('sh')"><div class="nic">📋</div><div class="nlb">السجل</div></button>
+    <button class="ni" id="nv-a" onclick="G('sa')" style="display:none"><div class="nic">👑</div><div class="nlb">المسؤول</div></button>
+  </div>
+</div>
+
+<!-- NEW RETURN -->
+<div id="sn" class="scr">
+  <div class="tb"><button class="tb-btn btn" onclick="G('sd')">← رجوع</button><div class="tb-t">استرجاع جديد</div><div style="width:70px"></div></div>
+  <div class="fc">
+    <div class="steps">
+      <div class="stp"><div class="stp-d done">✓</div><div class="stp-l">بيانات</div></div>
+      <div class="stp-ln done"></div>
+      <div class="stp"><div class="stp-d act">2</div><div class="stp-l">النوع</div></div>
+      <div class="stp-ln"></div>
+      <div class="stp"><div class="stp-d">3</div><div class="stp-l">الأصناف</div></div>
+      <div class="stp-ln"></div>
+      <div class="stp"><div class="stp-d">4</div><div class="stp-l">تأكيد</div></div>
+    </div>
+    <div class="fs">
+      <div class="ft">💊 بيانات الصيدلية</div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+// ═══ DATABASE ═══
+const DB = {
+  _g(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}},
+  _s(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}},
+  get rets(){return this._g('ph_r',[]);}, set rets(v){this._s('ph_r',v);},
+  get emps(){return this._g('ph_e',[
+    {id:1,name:'علي حسين الجبوري',role:'admin',region:'بغداد - الكرخ',phone:'0771-111-1111',email:'',returns:5},
+    {id:2,name:'محمد عبد الله الشمري',role:'rep',region:'البصرة',phone:'0772-222-2222',email:'',returns:12},
+    {id:3,name:'أحمد كاظم العبودي',role:'driver',region:'الموصل - نينوى',phone:'0773-333-3333',email:'',returns:8},
+  ]);}, set emps(v){this._s('ph_e',v);},
+  get drugs(){return this._g('ph_d',[
+    {id:'MED001',name:'أموكسيسيلين 500مج',cat:'مضاد حيوي',unit:'علبة'},
+    {id:'MED002',name:'باراسيتامول 1000مج',cat:'مسكن',unit:'علبة'},
+    {id:'MED003',name:'أوميبرازول 20مج',cat:'معدة وهضم',unit:'شريط'},
+    {id:'MED004',name:'ميترونيدازول 250مج',cat:'مضاد حيوي',unit:'علبة'},
+    {id:'MED005',name:'سيبروفلوكساسين 500مج',cat:'مضاد حيوي',unit:'علبة'},
+    {id:'MED006',name:'ديكلوفيناك 50مج',cat:'مسكن',unit:'شريط'},
+    {id:'MED007',name:'فيتامين C 1000مج',cat:'فيتامينات',unit:'أنبوب'},
+    {id:'MED008',name:'لوراتادين 10مج',cat:'جهاز تنفسي',unit:'علبة'},
+    {id:'MED009',name:'ميتفورمين 500مج',cat:'سكري',unit:'علبة'},
+    {id:'MED010',name:'أملوديبين 5مج',cat:'قلب وضغط',unit:'علبة'},
+  ]);}, set drugs(v){this._s('ph_d',v);},
+  get team(){return this._g('ph_t',[]);}, set team(v){this._s('ph_t',v);},
+  get quota(){return parseInt(this._g('ph_q',15));}, set quota(v){this._s('ph_q',v);},
+  get pw(){return localStorage.getItem('ph_pw')||'admin123';}, set pw(v){localStorage.setItem('ph_pw',v);},
+};
+
+// ═══ SESSION ═══
+const S = {role:'rep',name:'',drv:'',region:'',scanned:[],retType:'',hf:'all',photoData:null};
+
+// ═══ NAVIGATION ═══
+function G(id){
+  closeCam();
+  document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  ['nv-d','nv-n','nv-h','nv-a'].forEach(n=>{const e=document.getElementById(n);if(e)e.classList.remove('on');});
+  const nm={sd:'nv-d',sn:'nv-n',sh:'nv-h',sa:'nv-a'};
+  if(nm[id]){const e=document.getElementById(nm[id]);if(e)e.classList.add('on');}
+  window.scrollTo({top:0,behavior:'instant'});
+  if(id==='sd')rdash(); if(id==='sh')renderH(); if(id==='sa')radmin(); if(id==='sn')resetForm();
+}
+
+// ═══ TERMINAL ═══
+const TLS=[
+  {c:'tc',t:'$ pharm-return --boot --region=IQ --v5'},
+  {c:'ti',t:'  💊 PharmReturn v5 | نظام استرجاع الأدوية'},
+  {c:'tv',t:'  ✓ محافظات العراق: 20 محافظة'},
+  {c:'tv',t:'  ✓ قاعدة بيانات: '+10+' دواء مسجل'},
+  {c:'tv',t:'  ✓ باركود: BarcodeDetector + ZXing'},
+  {c:'tv',t:'  ✓ أنواع الاسترجاع: كامل·جزئي·تالف·اكسباير'},
+  {c:'tv',t:'  ✓ الفريق: سوبر فايزر·مندوب·سائق'},
+  {c:'tw',t:'  ⚠ الحد الأدنى: '+DB.quota+' عملية/شهر'},
+  {c:'tc',t:'  ● بغداد UTC+3 | '+new Date().toLocaleDateString('ar-IQ')},
+  {c:'tc',t:'$ الجاهزية: 100% ✓'},
+];
+(async()=>{const c=document.getElementById('tl');for(const l of TLS){await new Promise(r=>setTimeout(r,170));const d=document.createElement('div');d.className='tl';d.innerHTML=`<span class="${l.c}">${l.t}</span>`;c.appendChild(d);c.parentElement.scrollTop=9999;}})();
+
+// ═══ AUTH ═══
+function selRole(r){
+  S.role=r;
+  ['rep','driver','admin'].forEach(x=>document.getElementById('r-'+x).classList.remove('on'));
+  document.getElementById('r-'+r).classList.add('on');
+  document.getElementById('l-drv-w').style.display=r==='rep'?'block':'none';
+}
+selRole('rep');
+
+function doLogin(){
+  const nm=document.getElementById('l-nm').value.trim();
+  const rg=document.getElementById('l-reg').value;
+  const err=document.getElementById('l-err');
+  if(!nm||!rg){err.classList.add('on');return;}
+  err.classList.remove('on');
+  S.name=nm; S.region=rg; S.drv=document.getElementById('l-drv').value.trim()||'—';
+  G('sd'); toast('مرحباً '+nm+' 👋','succ');
+}
+function doLogout(){S.name='';S.role='rep';S.region='';document.getElementById('l-nm').value='';document.getElementById('l-reg').value='';G('sw');}
+function showAdminPW(){document.getElementById('pw-in').value='';document.getElementById('pw-err').textContent='';document.getElementById('apw').classList.add('on');setTimeout(()=>document.getElementById('pw-in').focus(),300);}
+function closeAPW(){document.getElementById('apw').classList.remove('on');}
+function checkPW(){
+  const v=document.getElementById('pw-in').value;
+  if(v===DB.pw){closeAPW();S.role='admin';S.name='المسؤول الرئيسي';S.region='بغداد - الكرخ';S.drv='—';G('sd');toast('مرحباً يا مسؤول 👑','succ');}
+  else{document.getElementById('pw-err').textContent='⚠️ كلمة مرور خاطئة';document.getElementById('pw-in').value='';if(navigator.vibrate)navigator.vibrate(200);}
+}
+
+// ═══ DASHBOARD ═══
+const RM={admin:'👑 مسؤول',rep:'🧑‍💼 مندوب',driver:'🚚 سائق'};
